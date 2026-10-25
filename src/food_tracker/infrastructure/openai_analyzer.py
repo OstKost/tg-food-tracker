@@ -17,7 +17,7 @@ from food_tracker.infrastructure.analysis_schema import (
 
 
 class OpenAIFoodAnalyzer:
-    """OpenAI Responses API adapter using strict JSON Schema and no response storage."""
+    """OpenAI Responses and Chat Completions API adapter using strict JSON Schema."""
 
     def __init__(
         self,
@@ -35,6 +35,7 @@ class OpenAIFoodAnalyzer:
             timeout=httpx.Timeout(timeout_seconds),
             headers={"Authorization": f"Bearer {api_key}"},
         )
+        self._use_chat_completions = False
 
     async def analyze(self, text: str) -> MealAnalysis:
         payload = await self._request(
@@ -86,7 +87,7 @@ class OpenAIFoodAnalyzer:
     async def _request(
         self, *, name: str, schema: dict[str, Any], instructions: str, user_text: str
     ) -> str:
-        body = {
+        responses_body = {
             "model": self._model,
             "store": False,
             "instructions": instructions,
@@ -101,9 +102,32 @@ class OpenAIFoodAnalyzer:
             },
             "max_output_tokens": 1800,
         }
+        chat_body = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": user_text},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": name,
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+            "max_tokens": 1800,
+        }
         for attempt in range(2):
             try:
-                response = await self._client.post("/responses", json=body)
+                if not self._use_chat_completions:
+                    response = await self._client.post("/responses", json=responses_body)
+                    if response.status_code == 404:
+                        self._use_chat_completions = True
+                        response = await self._client.post("/chat/completions", json=chat_body)
+                else:
+                    response = await self._client.post("/chat/completions", json=chat_body)
+
                 if response.status_code in {408, 429} or response.status_code >= 500:
                     if attempt == 0:
                         await asyncio.sleep(0.25)
@@ -128,18 +152,24 @@ class OpenAIFoodAnalyzer:
         direct = data.get("output_text")
         if isinstance(direct, str) and direct:
             return direct
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices:
+            message = choices[0].get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str) and content:
+                    return content
         output = data.get("output")
-        if not isinstance(output, list):
-            raise AnalysisError("OpenAI response has no output")
-        for message in output:
-            if not isinstance(message, dict) or message.get("type") != "message":
-                continue
-            content = message.get("content")
-            if not isinstance(content, list):
-                continue
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "output_text":
-                    text = part.get("text")
-                    if isinstance(text, str) and text:
-                        return text
+        if isinstance(output, list):
+            for message in output:
+                if not isinstance(message, dict) or message.get("type") != "message":
+                    continue
+                content = message.get("content")
+                if not isinstance(content, list):
+                    continue
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "output_text":
+                        text = part.get("text")
+                        if isinstance(text, str) and text:
+                            return text
         raise AnalysisError("OpenAI response has no JSON text")

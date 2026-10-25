@@ -108,3 +108,64 @@ async def test_openai_retries_one_timeout() -> None:
 
     assert calls == 2
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_openai_fallback_to_chat_completions() -> None:
+    calls: list[str] = []
+
+    payload = {
+        "schema_version": "1.0",
+        "items": [
+            {
+                "item_id": "item-1",
+                "name": "Яблоко",
+                "amount_g": 150,
+                "kcal": 78,
+                "protein_g": 0.4,
+                "fat_g": 0.3,
+                "carbs_g": 21,
+                "food_groups": ["fruit"],
+                "confidence": 0.9,
+                "assumptions": [],
+            }
+        ],
+        "assumptions": [],
+        "confidence": 0.9,
+        "needs_clarification": False,
+        "clarification_question": None,
+        "high_calorie_reason": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/v1/responses":
+            return httpx.Response(404, json={"detail": "Not Found"})
+        if request.url.path == "/v1/chat/completions":
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps(payload),
+                            },
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(500)
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.openai.test/v1"
+    )
+    analyzer = OpenAIFoodAnalyzer("secret", "test-model", client=client)
+
+    result = await analyzer.analyze("яблоко")
+
+    assert result.kcal == 78
+    assert calls == ["/v1/responses", "/v1/chat/completions"]
+    await client.aclose()
+
