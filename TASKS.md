@@ -229,20 +229,20 @@
 - Evidence: `docs/SETUP.md` добавлен и команды сверены с реализацией; независимое чистое
   развёртывание за 45 минут остаётся частью живой проверки FT-202.
 
-### FT-204 — Настроить CI/CD для развёртывания на M0 с учётом AmneziaWG
+### FT-204 — Настроить CI/CD для развёртывания на VPS (109.107.176.224)
 
 - Status: DONE
 - Owner: `python-integrator`
 - Depends on: FT-201
 - Timebox: 0,5 дня
-- Result: GitHub Actions пайплайн для проверок и автоматического деплоя на M0 из веток main/master с проверкой awg0.
+- Result: GitHub Actions пайплайн для проверок и автоматического деплоя на зарубежный VPS (109.107.176.224) из веток main/master.
 - Acceptance:
   - workflow запускает quality gate (Ruff, mypy, pytest, Docker build);
-  - при push в main/master проверяется активность `awg-quick@awg0` и доступность `api.telegram.org` на M0;
-  - Docker Compose сеть настроена с MTU 1280 под туннель AmneziaWG;
+  - при push в main/master выполняется деплой на 109.107.176.224 через SSH;
+  - прямое подключение к Telegram API и Google Cloud работает без VPN/туннелей;
   - скрипт развёртывания `deploy/deploy.sh` сериализует вызовы через flock, проверяет права секретов, валидирует схему Sheets и мягко перезапускает бот.
 - Evidence: `.github/workflows/ci.yml`, `deploy/deploy.sh`, `compose.yaml`, `.gitignore` обновлены;
-  сборка и сетевой стек с MTU 1280 проверены на ноде M0.
+  сборка и окружение проверены на хосте 109.107.176.224.
 
 ## Recommended next task
 

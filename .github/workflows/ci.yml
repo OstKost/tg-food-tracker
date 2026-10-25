@@ -33,20 +33,20 @@ jobs:
         run: docker build -t tg-food-tracker:test .
 
   deploy:
-    name: Deploy to M0
+    name: Deploy to VPS
     needs: quality
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
     concurrency:
-      group: production-deploy-m0
+      group: production-deploy
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to M0 over SSH
+      - name: Deploy to VPS over SSH
         env:
-          VPS_HOST: ${{ vars.VPS_HOST || secrets.VPS_HOST || '176.53.174.118' }}
+          VPS_HOST: ${{ vars.VPS_HOST || secrets.VPS_HOST || '109.107.176.224' }}
           VPS_USER: ${{ vars.VPS_USER || secrets.VPS_USER || 'root' }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY || secrets.DEPLOY_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
@@ -73,20 +73,8 @@ jobs:
           target="${VPS_USER}@${VPS_HOST}"
           remote_dir="/opt/tg-food-tracker"
 
-          echo "Checking M0 host and AmneziaWG (awg0) tunnel before transfer..."
-          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=15 "$target" "bash -s" <<'CHECK_AWG'
-          set -euo pipefail
-          if ! systemctl is-active --quiet awg-quick@awg0; then
-            echo "awg-quick@awg0 is down, attempting restart..."
-            systemctl restart awg-quick@awg0 || true
-            sleep 2
-          fi
-          if ! systemctl is-active --quiet awg-quick@awg0; then
-            echo "ERROR: awg-quick@awg0 is not active on target host! Telegram routing requires awg." >&2
-            exit 1
-          fi
-          echo "awg-quick@awg0 is active."
-          CHECK_AWG
+          echo "Verifying VPS connectivity to $VPS_HOST..."
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=15 "$target" "echo 'Connected to $VPS_HOST successfully'"
 
           echo "Synchronizing project files to $remote_dir on $VPS_HOST..."
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$target" "mkdir -p '$remote_dir/secrets'"

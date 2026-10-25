@@ -215,13 +215,10 @@ make run
    что пришёл один отчёт и появилась строка `ReportLog`. Верните `21:00`.
 9. `/delete_me` проверяйте только после резервной копии: команда очищает личные строки.
 
-## 8. Запуск на VPS через Docker и AmneziaWG (awg)
+## 8. Запуск на VPS через Docker
 
-На VPS (например, нода M0) установите Docker Engine и Compose plugin.
-Учтите, что для взаимодействия с серверами Telegram на хосте используется AmneziaWG (`awg-quick@awg0`),
-через который маршрутизируются диапазоны `91.108.0.0/16` и `149.154.160.0/20`.
-Так как MTU туннеля `awg0` равен 1280, сеть Docker Compose (`compose.yaml`) сконфигурирована с MTU 1280,
-что предотвращает фрагментацию и зависание TLS-пакетов при взаимодействии с Telegram API.
+На VPS (`109.107.176.224`) установлен Docker Engine и Compose plugin. Сервер находится за пределами
+РФ, поэтому прямое взаимодействие с Telegram API и Google Cloud работает без туннелей или VPN.
 
 Скопируйте проект и создайте `.env` и `secrets/google-service-account.json`. В `.env` укажите:
 
@@ -251,7 +248,7 @@ docker compose down
 docker compose up -d
 ```
 
-## 9. Непрерывное развёртывание (CI/CD) на M0
+## 9. Непрерывное развёртывание (CI/CD) на VPS
 
 Проект настроен для автоматической сборки, проверок и развёртывания через GitHub Actions (`.github/workflows/ci.yml`):
 
@@ -259,15 +256,15 @@ docker compose up -d
 - **Quality Gate**:
   - Ruff, mypy, pytest на Python 3.14;
   - Сборка и валидация Dockerfile.
-- **Deploy на M0**:
-  - Проверка статуса сервиса `awg-quick@awg0` и доступности `https://api.telegram.org`;
+- **Deploy на VPS**:
+  - Проверка доступности хоста `109.107.176.224` и `https://api.telegram.org`;
   - Синхронизация кода через `git archive` в `/opt/tg-food-tracker` (без перезаписи `.env` и `secrets/`);
   - Запуск `deploy/deploy.sh`: блокировка релиза через flock, сборка образа, вызов `python -m food_tracker.cli` для проверки схемы Sheets, перезапуск контейнера и проверка статуса.
 
 ### Необходимые секреты в GitHub:
 
-- `VPS_SSH_KEY` (или `DEPLOY_SSH_KEY`): приватный SSH-ключ для доступа к M0 (соответствующий публичный ключ `github-actions-deploy` уже прописан в `~/.ssh/authorized_keys` на M0).
-- `VPS_HOST`: адрес хоста (по умолчанию `176.53.174.118`).
+- `VPS_SSH_KEY` (или `DEPLOY_SSH_KEY`): приватный SSH-ключ для доступа к VPS (соответствующий публичный ключ `github-actions-deploy` уже прописан в `~/.ssh/authorized_keys` на `109.107.176.224`).
+- `VPS_HOST`: адрес хоста (по умолчанию `109.107.176.224`).
 - `VPS_USER`: пользователь SSH (по умолчанию `root`).
 - `VPS_KNOWN_HOSTS`: опционально, host key fingerprint (если не задан, считывается автоматически через `ssh-keyscan`).
 

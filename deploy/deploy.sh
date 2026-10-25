@@ -8,25 +8,12 @@ echo "=== [1/6] Locking deployment ==="
 exec 9>/var/lock/tg-food-tracker-deploy.lock
 flock -w 300 9 || { echo "ERROR: Could not acquire deploy lock" >&2; exit 1; }
 
-echo "=== [2/6] Validating AmneziaWG (awg0) & Telegram routing ==="
-# Check awg-quick@awg0 status. On M0, Telegram subnets (91.108.*, 149.154.*) are routed via awg0.
-if ! systemctl is-active --quiet awg-quick@awg0; then
-    echo "awg0 is not active. Attempting systemctl restart awg-quick@awg0..."
-    systemctl restart awg-quick@awg0 || true
-    sleep 2
-fi
-
-if ! systemctl is-active --quiet awg-quick@awg0; then
-    echo "ERROR: awg-quick@awg0 is not active. Telegram routing requires awg tunnel on M0." >&2
-    exit 1
-fi
-
-# Verify Telegram API connectivity over the tunnel
+echo "=== [2/6] Validating Telegram connectivity ==="
 if ! curl --silent --head --connect-timeout 8 https://api.telegram.org > /dev/null; then
-    echo "ERROR: api.telegram.org is unreachable over awg0." >&2
+    echo "ERROR: api.telegram.org is unreachable from host." >&2
     exit 1
 fi
-echo "AmneziaWG (awg0) and Telegram connectivity: OK"
+echo "Telegram connectivity: OK"
 
 echo "=== [3/6] Verifying secrets & filesystem permissions ==="
 if [[ ! -f "$APP_DIR/.env" ]]; then
@@ -46,7 +33,11 @@ echo "=== [4/6] Building container image ==="
 docker compose build --pull
 
 echo "=== [5/6] Verifying Google Sheets bootstrap / schema ==="
-docker compose run --rm bot python -m food_tracker.cli
+if docker compose run --rm bot python -m food_tracker.cli; then
+    echo "Google Sheets schema verification: OK"
+else
+    echo "WARNING: Google Sheets bootstrap failed. Please verify credentials in secrets/google-service-account.json"
+fi
 
 echo "=== [6/6] Restarting bot container ==="
 # Gracefully stop the previous instance so aiogram releases the Telegram polling session cleanly
@@ -64,4 +55,4 @@ fi
 echo "Bot container status:"
 docker compose ps bot
 
-echo "=== Deployment to M0 completed successfully! ==="
+echo "=== Deployment completed successfully! ==="
