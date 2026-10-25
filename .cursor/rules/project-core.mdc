@@ -1,0 +1,18 @@
+---
+description: Core constraints for the personal Telegram Food Tracker
+alwaysApply: true
+---
+
+# Project core
+
+- Read `AGENTS.md` and the active SMART item in `TASKS.md` before edits.
+- Use Python 3.14.7, one asyncio process, one allowed Telegram user and Google Sheets.
+- Do not add a DB, ORM, external queue or worker without an accepted ADR.
+- Keep Telegram, OpenAI and Google clients behind protocols with deterministic fakes.
+- Use `event_key = chat_id:message_id` and reconcile append timeout before retry.
+- Persist `logged_at` with offset and `local_date` in `APP_TIMEZONE`.
+- Validate model JSON locally, reject invalid ranges and recalculate totals from items.
+- Use stable IDs, never Google Sheets row numbers, for identity.
+- Send OpenAI `store=false`; use Gemini Interactions for Gemini; never commit or log secrets or raw provider responses.
+- Do not touch live Sheets/Telegram/OpenAI in tests without explicit permission.
+- Add regression tests and task Evidence for every behavior change.

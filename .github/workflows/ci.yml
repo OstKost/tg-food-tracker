@@ -1,0 +1,107 @@
+name: CI / CD
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality & Build Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: python -m pip install -r requirements.lock
+      - run: python -m pip install --no-deps -e .
+      - run: python -m ruff check .
+      - run: python -m mypy src tests
+      - run: python -m pytest
+      - name: Validate Docker build
+        run: docker build -t tg-food-tracker:test .
+
+  deploy:
+    name: Deploy to M0
+    needs: quality
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    concurrency:
+      group: production-deploy-m0
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to M0 over SSH
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST || secrets.VPS_HOST || '176.53.174.118' }}
+          VPS_USER: ${{ vars.VPS_USER || secrets.VPS_USER || 'root' }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${VPS_SSH_KEY:-}" ]]; then
+            echo "ERROR: Neither VPS_SSH_KEY nor DEPLOY_SSH_KEY is set in GitHub repository secrets/environment." >&2
+            echo "Please configure VPS_SSH_KEY in repository secrets (or environment 'production')." >&2
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          if [[ -n "${VPS_KNOWN_HOSTS:-}" ]]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+          target="${VPS_USER}@${VPS_HOST}"
+          remote_dir="/opt/tg-food-tracker"
+
+          echo "Checking M0 host and AmneziaWG (awg0) tunnel before transfer..."
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=15 "$target" "bash -s" <<'CHECK_AWG'
+          set -euo pipefail
+          if ! systemctl is-active --quiet awg-quick@awg0; then
+            echo "awg-quick@awg0 is down, attempting restart..."
+            systemctl restart awg-quick@awg0 || true
+            sleep 2
+          fi
+          if ! systemctl is-active --quiet awg-quick@awg0; then
+            echo "ERROR: awg-quick@awg0 is not active on target host! Telegram routing requires awg." >&2
+            exit 1
+          fi
+          echo "awg-quick@awg0 is active."
+          CHECK_AWG
+
+          echo "Synchronizing project files to $remote_dir on $VPS_HOST..."
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$target" "mkdir -p '$remote_dir/secrets'"
+          git archive --format=tar.gz HEAD | ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$target" "
+            set -euo pipefail
+            mkdir -p '$remote_dir/.incoming'
+            tar -xzf - -C '$remote_dir/.incoming'
+            cp -r '$remote_dir/.incoming/'* '$remote_dir/'
+            rm -rf '$remote_dir/.incoming'
+          "
+
+          echo "Running remote deployment script..."
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$target" "
+            set -euo pipefail
+            cd '$remote_dir'
+            chmod +x deploy/deploy.sh
+            ./deploy/deploy.sh
+          "
