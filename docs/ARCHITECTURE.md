@@ -11,7 +11,7 @@
 
 ```mermaid
 flowchart LR
-    U[Telegram user] --> B[aiogram bot]
+    U[Telegram user] --> B[Telegram bot]
     B --> A[Application services]
     A --> O[FoodAnalyzer: OpenAI or Gemini]
     A --> S[Google Sheets repository]
@@ -21,8 +21,8 @@ flowchart LR
     T[Scheduler] --> A
 ```
 
-Один Python-процесс использует Telegram long polling. Domain/application не знают
-об aiogram, HTTPX и Google SDK. Все внешние зависимости реализуют протоколы и имеют
+Один Go-процесс использует Telegram long polling. Domain/application не знают
+о Telegram SDK, HTTP-библиотеках и Google SDK. Все внешние зависимости реализуют интерфейсы и имеют
 fake для тестов.
 
 ## Основные контракты
@@ -33,7 +33,7 @@ fake для тестов.
 - `analyze_correction(text, meal) -> MealCorrection`.
 
 Выбранный провайдер (OpenAI или Gemini) возвращает позиции, массу, kcal, белки, жиры, углеводы, пищевые группы,
-допущения, confidence и, при необходимости, уточняющий вопрос. Pydantic проверяет
+допущения, confidence и, при необходимости, уточняющий вопрос. Доменная модель строго проверяет
 JSON. Приложение игнорирует внешний итог и суммирует проверенные позиции само.
 
 ### `SheetsRepository`
@@ -45,8 +45,7 @@ JSON. Приложение игнорирует внешний итог и су�
 - атомарно для одного процесса заявить дневной отчёт;
 - завершить отчёт или очистить личные данные.
 
-Синхронный Google client вызывается через `asyncio.to_thread`. Один `asyncio.Lock`
-сериализует логические операции check/append и find/update.
+Все операции с Google Sheets API сериализуются одним `sync.Mutex` (check/append и find/update).
 
 ## Google Sheets
 

@@ -8,7 +8,6 @@ services:
       - .env
     environment:
       GOOGLE_SERVICE_ACCOUNT_FILE: /run/secrets/google-service-account.json
-      MALLOC_ARENA_MAX: "2"
     volumes:
       - type: bind
         source: ./secrets/google-service-account.json
@@ -16,8 +15,8 @@ services:
         read_only: true
     init: true
     stop_grace_period: 15s
-    mem_limit: 400m
-    mem_reservation: 150m
+    mem_limit: 100m
+    mem_reservation: 30m
     logging:
       driver: "json-file"
       options:

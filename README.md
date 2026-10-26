@@ -18,13 +18,12 @@
 
 ## Стек
 
-- Python 3.14.7;
-- aiogram 3;
-- Pydantic 2 и pydantic-settings;
-- HTTPX для OpenAI Responses API или Gemini Interactions API;
-- официальный Google API Python client;
-- pytest, Ruff и mypy;
-- один Docker-контейнер на VPS.
+- Go 1.24+;
+- github.com/go-telegram/bot (Telegram Bot API, long polling);
+- net/http для OpenAI Responses API / Chat Completions и Gemini Interactions API;
+- официальный Google API Go client (`google.golang.org/api/sheets/v4`);
+- встроенный `go test` с детектором гонок (`-race`);
+- минимальный multi-stage Docker-контейнер на Alpine (< 25 МБ RAM).
 
 ## Документы
 

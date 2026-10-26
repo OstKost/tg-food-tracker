@@ -15,23 +15,22 @@
 
 ## Неизменяемые ограничения MVP
 
-- Один Python 3.14.7-процесс через Telegram long polling.
+- Один Go-процесс через Telegram long polling.
 - Google Sheets — единственное постоянное хранилище.
 - Доступ имеет только `ALLOWED_TELEGRAM_USER_ID`.
 - Не добавлять БД, ORM, очередь или второй процесс без нового ADR.
-- Синхронный Sheets API вызывать через `asyncio.to_thread`.
-- Все операции Sheets сериализовать одним `asyncio.Lock`.
+- Все операции Sheets сериализовать одним `sync.Mutex`.
 - Идемпотентность сообщения строится на `event_key = chat_id:message_id`.
 - После неизвестного результата append сначала искать `event_key`, затем повторять.
 - Хранить `logged_at` с offset и отдельно `local_date` в `APP_TIMEZONE`.
-- JSON модели всегда валидировать Pydantic-моделью и пересчитывать итоги из позиций.
+- JSON модели всегда валидировать доменной моделью и пересчитывать итоги из позиций.
 - При OpenAI передавать `store=false`; для Gemini использовать Interactions API. Не логировать
   ключи и сырые ответы любого провайдера.
 
 ## Команда из трёх агентов
 
 - `product-architect` — ADR, сценарии, схема Sheets, формулы и SMART-декомпозиция.
-- `python-integrator` — Python, aiogram, OpenAI/Gemini, Google Sheets, scheduler и Docker.
+- `golang-integrator` — Go, Telegram Bot API, OpenAI/Gemini, Google Sheets, scheduler и Docker.
 - `qa-operator` — независимые тесты, отказоустойчивость и инструкция настройки.
 
 Конфигурации находятся в `.cursor/agents/`. Один файл одновременно имеет одного

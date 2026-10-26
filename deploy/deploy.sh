@@ -33,14 +33,14 @@ echo "=== [4/6] Building container image ==="
 docker compose build --pull
 
 echo "=== [5/6] Verifying Google Sheets bootstrap / schema ==="
-if docker compose run --rm bot python -m food_tracker.cli; then
+if docker compose run --rm bot -setup; then
     echo "Google Sheets schema verification: OK"
 else
     echo "WARNING: Google Sheets bootstrap failed. Please verify credentials in secrets/google-service-account.json"
 fi
 
 echo "=== [6/6] Restarting bot container ==="
-# Gracefully stop the previous instance so aiogram releases the Telegram polling session cleanly
+# Gracefully stop the previous instance so Telegram polling is cleanly closed
 docker compose stop bot 2>/dev/null || true
 docker compose up -d --remove-orphans bot
 

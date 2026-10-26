@@ -1,19 +1,16 @@
-.PHONY: install quality test run setup
+.PHONY: build test run setup clean
 
-install:
-	python3.14 -m pip install -r requirements.lock
-	python3.14 -m pip install --no-deps -e .
-
-quality:
-	python3.14 -m ruff check .
-	python3.14 -m mypy src tests
-	python3.14 -m pytest
+build:
+	go build -o bin/food_tracker ./cmd/food_tracker
 
 test:
-	python3.14 -m pytest
+	go test -race -v ./...
 
 run:
-	python3.14 -m food_tracker
+	go run ./cmd/food_tracker
 
 setup:
-	python3.14 -m food_tracker.cli
+	go run ./cmd/food_tracker -setup
+
+clean:
+	rm -rf bin/

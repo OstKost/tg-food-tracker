@@ -15,4 +15,6 @@ build/
 *.egg-info/
 *service-account*.json
 *credentials*.json
+bin/
+*.test
 .DS_Store
