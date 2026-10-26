@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 from food_tracker.ports import SheetsRepository, TelegramTransport
 from food_tracker.recommendations import daily_recommendation
+
+logger = logging.getLogger(__name__)
 
 
 class DailyReportScheduler:
@@ -26,19 +29,29 @@ class DailyReportScheduler:
         self._timezone = timezone
         self._report_time = report_time
         self._clock = clock or (lambda: datetime.now(tz=timezone))
+        self._last_sent_date: date | None = None
 
     async def run_once(self, now: datetime | None = None) -> bool:
         current = (now or self._clock()).astimezone(self._timezone)
         if current.time().replace(tzinfo=None) < self._report_time:
             return False
         local_date = current.date()
+        if self._last_sent_date == local_date:
+            return False
+
+        report_key = f"daily:{self._telegram_user_id}:{local_date.isoformat()}"
+        if await self._repository.is_report_sent(report_key):
+            self._last_sent_date = local_date
+            return False
+
         summary = await self._repository.get_today_summary(local_date)
         if not any(
             (summary.kcal, summary.protein_g, summary.fat_g, summary.carbs_g)
         ):
             return False
-        report_key = f"daily:{self._telegram_user_id}:{local_date.isoformat()}"
+
         if not await self._repository.claim_report(report_key, local_date):
+            self._last_sent_date = local_date
             return False
 
         recent = await self._repository.get_recent_meals(limit=100)
@@ -56,12 +69,25 @@ class DailyReportScheduler:
             sent_at=current if current.tzinfo is not None else current.replace(tzinfo=UTC),
             telegram_message_id=message_id,
         )
+        self._last_sent_date = local_date
         return True
 
     async def run_forever(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
-            await self.run_once()
             try:
-                await asyncio.wait_for(stop.wait(), timeout=30)
+                await self.run_once()
+            except Exception:
+                logger.exception("Failed to run daily report scheduler iteration")
+
+            current = self._clock().astimezone(self._timezone)
+            if self._last_sent_date == current.date():
+                timeout = 300
+            elif current.time().replace(tzinfo=None) < self._report_time:
+                timeout = 60
+            else:
+                timeout = 60
+
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=timeout)
             except TimeoutError:
                 continue
